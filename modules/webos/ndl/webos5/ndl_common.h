@@ -16,6 +16,7 @@ struct SS4S_PlayerContext {
     NDL_DIRECTMEDIA_DATA_INFO_T mediaInfo;
     struct SS4S_OpusEmpty *opusEmpty;
     struct SS4S_NDLOpusFix *opusFix;
+    bool opus71;
     bool mediaLoaded;
     struct timespec mediaLoadedTime;
     bool waitAudioVideoReady;

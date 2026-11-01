@@ -1,5 +1,5 @@
 ss4s_add_module(ndl-webos5 FOR_AUDIO FOR_VIDEO IN_GROUP ndl DISPLAY_NAME "webOS NDL"
-        SOURCES ndl_module.c ndl_player.c ndl_audio.c ndl_video.c
+        SOURCES ndl_module.c ndl_player.c ndl_audio.c ndl_video.c opus_config.c
         WEIGHT 50 CONFLICTS lgnc OS_VERSION ">=5")
 if (NOT SS4S_MODULE_TARGET)
     return()
@@ -31,3 +31,15 @@ target_link_libraries(${SS4S_MODULE_TARGET} PRIVATE ${NDL_DIRECTMEDIA_V2_LIBRARI
         pthread dl ss4s-opus-empty ss4s-opus-fix ss4s-webos-utils)
 target_compile_definitions(${SS4S_MODULE_TARGET} PRIVATE NDL_DIRECTMEDIA_API_VERSION=2 _GNU_SOURCE)
 target_compile_options(${SS4S_MODULE_TARGET} PRIVATE -Wno-error=attributes)
+
+option(SS4S_WEBOS_OPUS71_EXPERIMENTAL "App-local C5 Opus 7.1 experiment" OFF)
+if (SS4S_WEBOS_OPUS71_EXPERIMENTAL)
+    target_compile_definitions(${SS4S_MODULE_TARGET} PRIVATE SS4S_WEBOS_OPUS71_EXPERIMENTAL=1)
+    pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0>=1.8)
+    add_library(ss4s-opus71-route SHARED opus71_route.c opus_config.c)
+    target_include_directories(ss4s-opus71-route PRIVATE ${GSTREAMER_INCLUDE_DIRS})
+    target_link_directories(ss4s-opus71-route PRIVATE ${GSTREAMER_LIBRARY_DIRS})
+    target_link_libraries(ss4s-opus71-route PRIVATE ${GSTREAMER_LIBRARIES} pthread dl)
+    target_compile_options(ss4s-opus71-route PRIVATE -Wall -Wextra -Werror)
+    install(TARGETS ss4s-opus71-route LIBRARY DESTINATION lib)
+endif ()

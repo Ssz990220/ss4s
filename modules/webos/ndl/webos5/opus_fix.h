@@ -1,16 +1,8 @@
 #pragma once
 
-#include <stdint.h>
+#include "opus_config.h"
 
 typedef struct SS4S_NDLOpusFix SS4S_NDLOpusFix;
-
-typedef struct OpusConfig {
-    uint32_t sampleRate;
-    uint8_t channels;
-    uint8_t streamCount;
-    uint8_t coupledCount;
-    uint8_t mapping[6];
-} OpusConfig;
 
 SS4S_NDLOpusFix *SS4S_NDLOpusFixCreate(const OpusConfig *config);
 

@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "ndl_common.h"
 #include "opus_empty.h"
@@ -8,7 +9,10 @@
 
 static bool IsOpusPassthroughSupported(const OpusConfig *config);
 
-static bool ParseOpusConfig(const unsigned char *codecData, size_t codecDataLen, OpusConfig *config);
+typedef int (*Opus71Begin)(const unsigned char *, size_t);
+typedef void (*Opus71End)(void);
+static Opus71Begin opus71_begin;
+static Opus71End opus71_end;
 
 static int SupportsPCM6Channel = 0;
 
@@ -20,6 +24,14 @@ static int DriverInit(int argc, char *argv[]) {
      * We can use this to determine if the platform supports 6-channel PCM. 
      */
     SupportsPCM6Channel = dlsym(RTLD_DEFAULT, "NDL_DirectAudioRegisterCallback") != 0;
+#ifdef SS4S_WEBOS_OPUS71_EXPERIMENTAL
+    // Only the separate test launcher loads the app-local routing shim.
+    const char *enabled = getenv("SS4S_WEBOS_OPUS71");
+    if (enabled && strcmp(enabled, "1") == 0) {
+        opus71_begin = (Opus71Begin)dlsym(RTLD_DEFAULT, "SS4S_Opus71Begin");
+        opus71_end = (Opus71End)dlsym(RTLD_DEFAULT, "SS4S_Opus71End");
+    }
+#endif
     return 0;
 }
 
@@ -34,12 +46,12 @@ static bool GetCapabilities(SS4S_AudioCapabilities *capabilities, SS4S_AudioCode
      * Don't check for system settings to determine the number of channels, just provide 6 channels.
      * webOS should be able to down-mix that anyway.
      */
-    capabilities->maxChannels = 6;
+    capabilities->maxChannels = opus71_begin && opus71_end ? 8 : 6;
     return true;
 }
 
 static SS4S_AudioCodec GetPreferredCodecs(const SS4S_AudioInfo *info) {
-    if (info->numOfChannels == 6) {
+    if (info->numOfChannels == 6 || (info->numOfChannels == 8 && opus71_begin && opus71_end)) {
         return SS4S_AUDIO_OPUS;
     }
     return SS4S_AUDIO_PCM_S16LE;
@@ -52,6 +64,11 @@ static SS4S_AudioOpenResult OpenAudio(const SS4S_AudioInfo *info, SS4S_AudioInst
     SS4S_AudioOpenResult result;
     switch (info->codec) {
         case SS4S_AUDIO_PCM_S16LE: {
+            // Never feed eight-channel samples through NDL's stereo fallback.
+            if (info->numOfChannels != 1 && info->numOfChannels != 2 && info->numOfChannels != 6) {
+                result = SS4S_AUDIO_OPEN_UNSUPPORTED_CODEC;
+                goto finish;
+            }
             const char *mode = "stereo";
             if (info->numOfChannels == 1) {
                 mode = "mono";
@@ -80,9 +97,20 @@ static SS4S_AudioOpenResult OpenAudio(const SS4S_AudioInfo *info, SS4S_AudioInst
             };
             if (info->codecData && info->codecDataLen) {
                 OpusConfig opusConfig;
-                if (!ParseOpusConfig(info->codecData, info->codecDataLen, &opusConfig)) {
+                if (!SS4S_ParseOpusConfig(info->codecData, info->codecDataLen, &opusConfig) ||
+                    opusConfig.channels != info->numOfChannels || info->sampleRate != 48000) {
                     result = SS4S_AUDIO_OPEN_UNSUPPORTED_CODEC;
                     goto finish;
+                }
+                if (opusConfig.channels == 8) {
+                    if (!opus71_begin || !opus71_end ||
+                        !((opusConfig.streamCount == 5 && opusConfig.coupledCount == 3) ||
+                          (opusConfig.streamCount == 8 && opusConfig.coupledCount == 0)) ||
+                        opus71_begin(info->codecData, info->codecDataLen) != 0) {
+                        result = SS4S_AUDIO_OPEN_UNSUPPORTED_CODEC;
+                        goto finish;
+                    }
+                    context->opus71 = true;
                 }
                 // Feed one empty frame to the decoder to ensure it is ready
                 context->opusEmpty = SS4S_OpusEmptyCreate(opusConfig.channels, opusConfig.streamCount,
@@ -101,6 +129,9 @@ static SS4S_AudioOpenResult OpenAudio(const SS4S_AudioInfo *info, SS4S_AudioInst
                         goto finish;
                     }
                 }
+            } else if (info->numOfChannels > 2) {
+                result = SS4S_AUDIO_OPEN_UNSUPPORTED_CODEC;
+                goto finish;
             }
             context->mediaInfo.audio.opus = opusInfo;
             break;
@@ -118,6 +149,15 @@ static SS4S_AudioOpenResult OpenAudio(const SS4S_AudioInfo *info, SS4S_AudioInst
     result = SS4S_AUDIO_OPEN_OK;
 
     finish:
+    if (result != SS4S_AUDIO_OPEN_OK) {
+        if (context->opus71 && opus71_end) opus71_end();
+        context->opus71 = false;
+        if (context->opusEmpty) SS4S_OpusEmptyDestroy(context->opusEmpty);
+        if (context->opusFix) SS4S_NDLOpusFixDestroy(context->opusFix);
+        context->opusEmpty = NULL;
+        context->opusFix = NULL;
+        context->mediaInfo.audio.type = 0;
+    }
     pthread_mutex_unlock(&SS4S_NDL_webOS5_Lock);
     SS4S_NDL_webOS5_Log(SS4S_LogLevelInfo, "NDL", "OpenAudio returned %d", result);
     return result;
@@ -167,6 +207,8 @@ static void CloseAudio(SS4S_AudioInstance *instance) {
         context->opusEmpty = NULL;
     }
     SS4S_NDL_webOS5_UnloadMedia(context);
+    if (context->opus71 && opus71_end) opus71_end();
+    context->opus71 = false;
     pthread_mutex_unlock(&SS4S_NDL_webOS5_Lock);
 }
 
@@ -174,29 +216,6 @@ static void CloseAudio(SS4S_AudioInstance *instance) {
 bool IsOpusPassthroughSupported(const OpusConfig *config) {
     static const uint8_t wantedMapping[6] = {0, 1, 4, 5, 2, 3};
     return config->streamCount == 4 && config->coupledCount == 2 && memcmp(config->mapping, wantedMapping, 6) == 0;
-}
-
-bool ParseOpusConfig(const unsigned char *codecData, size_t codecDataLen, OpusConfig *config) {
-    if (codecDataLen < 20 || memcmp(codecData, "OpusHead", 8) != 0) {
-        return false;
-    }
-    memcpy(&config->sampleRate, codecData + 12, 4);
-    config->channels = codecData[9];
-    config->streamCount = codecData[19];
-    config->coupledCount = codecData[20];
-    if (config->channels > sizeof(config->mapping)) {
-        // We can only represent up to sizeof(mapping) channels (5.1 layout).
-        // Anything wider (e.g. 7.1 surround = 8 channels) would overflow the
-        // fixed-size mapping array on the memcpy below.
-        return false;
-    }
-    if ((int) codecDataLen >= 21 + config->channels) {
-        memcpy(config->mapping, codecData + 21, config->channels);
-    } else {
-        config->mapping[0] = 0;
-        config->mapping[1] = 0;
-    }
-    return true;
 }
 
 const SS4S_AudioDriver SS4S_NDL_webOS5_AudioDriver = {
