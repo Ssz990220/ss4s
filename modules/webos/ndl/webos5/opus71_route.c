@@ -268,6 +268,12 @@ static bool (*real_load)(void *, const char *, MediaCallback);
 static pthread_once_t load_once = PTHREAD_ONCE_INIT;
 static void resolve_load(void) {
     real_load = dlsym(RTLD_NEXT, "_ZN17StarfishMediaAPIs4LoadEPKcPFvixS1_E");
+    if (!real_load) {
+        /* SS4S modules use a local dlopen scope. Resolve this existing vendor
+         * dependency by handle without loading or constructing a new player. */
+        void *handle = dlopen("libplayerAPIs.so.1", RTLD_LAZY | RTLD_NOLOAD);
+        if (handle) real_load = dlsym(handle, "_ZN17StarfishMediaAPIs4LoadEPKcPFvixS1_E");
+    }
 }
 /* Match the copied C5 library's ARM32 C++ member ABI, including implicit this.
  * The real Load consumes/copies its JSON during the call, as with NDL's local
