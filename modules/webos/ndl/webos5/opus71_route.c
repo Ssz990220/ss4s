@@ -11,6 +11,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdio.h>
 #include "opus_config.h"
 
 #if defined(__arm__) && !defined(__aarch64__)
@@ -31,6 +32,12 @@ typedef struct {
     gboolean has_multich, has_bypass;
 } SinkState;
 static GPtrArray *sinks;
+
+__attribute__((constructor)) static void startup_log_buffering(void) {
+    /* Only preloaded in the separate test app. Its child worker filters logs. */
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+}
 
 static void notify(char kind) {
     const char *value = getenv("SS4S_OPUS71_NOTIFY_FD");
