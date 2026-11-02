@@ -14,7 +14,9 @@
 #include "opus_config.h"
 
 #if defined(__arm__) && !defined(__aarch64__)
-_Static_assert(sizeof(gpointer) == 4 && sizeof(GType) == 4 && sizeof(GValue) == 20,
+/* Confirmed against the copied C5 decoder's DWARF (_GValue=24 bytes).
+ * ARM EABI aligns its uint64/double union to eight bytes, unlike i386. */
+_Static_assert(GLIB_SIZEOF_VOID_P == 4 && sizeof(gpointer) == 4 && sizeof(GType) == 4 && sizeof(GValue) == 24,
                "The route shim must use the ARM32 GLib ABI, not host headers");
 #endif
 
