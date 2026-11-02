@@ -13,6 +13,11 @@
 #include <unistd.h>
 #include "opus_config.h"
 
+#if defined(__arm__) && !defined(__aarch64__)
+_Static_assert(sizeof(gpointer) == 4 && sizeof(GType) == 4 && sizeof(GValue) == 20,
+               "The route shim must use the ARM32 GLib ABI, not host headers");
+#endif
+
 static GMutex lock;
 static gboolean active;
 static unsigned char header[29];
