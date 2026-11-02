@@ -26,8 +26,10 @@ int SS4S_webOS_GetMaxVideoResolution(SS4S_VideoCodec codec, unsigned int *w, uns
             return -1;
         }
     }
-    int iw, ih, ifps;
-    if (MRCGetMaxVideoResolution(mrc_codec, &iw, &ih, &ifps) != 0) {
+    int iw = 0, ih = 0, ifps = 0;
+    /* The API returns bool: true means success (C5 returns 1). */
+    if (!MRCGetMaxVideoResolution(mrc_codec, &iw, &ih, &ifps) ||
+        iw <= 0 || ih <= 0 || ifps <= 0) {
         return -1;
     }
     if (fps) {

@@ -3,6 +3,9 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DEST=${1:-/tmp/ss4s-opus71-tests}
 CC=${CC:-cc}
+$CC -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    "$ROOT/tests/test_max_res.c" -I"$ROOT/include" -ldl -o "$DEST-max-res"
+"$DEST-max-res"
 # Intentionally no device access: libopus and GStreamer CAPS objects only.
 $CC -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$ROOT/tests/test_opus71.c" \

@@ -21,9 +21,11 @@ static bool GetCapabilities(SS4S_VideoCapabilities *capabilities) {
     // If fullColorRange is set to true, the video will be displayed with over saturated colors.
     capabilities->fullColorRange = false;
     capabilities->colorSpace = SS4S_VIDEO_CAP_COLORSPACE_BT2020 | SS4S_VIDEO_CAP_COLORSPACE_BT709;
-    if (SS4S_webOS_GetMaxVideoResolution(SS4S_VIDEO_H265, &capabilities->maxWidth, &capabilities->maxHeight, NULL)) {
+    if (SS4S_webOS_GetMaxVideoResolution(SS4S_VIDEO_H265, &capabilities->maxWidth, &capabilities->maxHeight,
+                                      &capabilities->maxFps)) {
         capabilities->maxWidth = 0;
         capabilities->maxHeight = 0;
+        capabilities->maxFps = 0;
     }
     return true;
 }
