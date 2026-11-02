@@ -190,6 +190,13 @@ static GstPadProbeReturn caps_probe(GstPad *pad, GstPadProbeInfo *info, gpointer
         gst_structure_set(gst_caps_get_structure(next, 0), "out-channels", G_TYPE_INT, 8,
                           "lfe-enable", G_TYPE_BOOLEAN, TRUE, NULL);
         notify('F');
+    } else if (active && GPOINTER_TO_INT(mode) == 2 && gst_caps_get_size(caps) == 1) {
+        const GstStructure *s = gst_caps_get_structure(caps, 0);
+        if (gst_structure_has_name(s, "audio/x-raw") &&
+            !gst_structure_has_field(s, "DUMMY") && !gst_structure_has_field(s, "BYPASS")) {
+            // A later real stereo/5.1 format revokes an existing LPCM8 lease.
+            notify('R');
+        }
     }
     g_mutex_unlock(&lock);
     if (next) {
