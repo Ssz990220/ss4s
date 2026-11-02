@@ -111,6 +111,14 @@ static SS4S_AudioOpenResult OpenAudio(const SS4S_AudioInfo *info, SS4S_AudioInst
                         goto finish;
                     }
                     context->opus71 = true;
+                    /* C5 NDL rejects OPUS 8ch before it constructs a decoder.
+                     * Bootstrap the accepted six-channel descriptor only; the
+                     * active app-local decoder probe restores all eight actual
+                     * channels and the full negotiated header before decoding.
+                     * Native output must still independently prove PCM8/21. */
+                    opusInfo.channels = 6;
+                    SS4S_NDL_webOS5_Log(SS4S_LogLevelInfo, "NDL",
+                                        "Opus71: NDL descriptor 6ch; decoder receives full OpusHead 8ch");
                 }
                 // Feed one empty frame to the decoder to ensure it is ready
                 context->opusEmpty = SS4S_OpusEmptyCreate(opusConfig.channels, opusConfig.streamCount,

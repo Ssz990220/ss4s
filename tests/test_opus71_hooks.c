@@ -25,6 +25,8 @@ static gboolean decode_event(GstPad *pad, GstObject *parent, GstEvent *event) {
         GstCaps *caps;
         gst_event_parse_caps(event, &caps);
         const GValue *headers = gst_structure_get_value(gst_caps_get_structure(caps, 0), "streamheader");
+        gint channels = 0;
+        assert(gst_structure_get_int(gst_caps_get_structure(caps, 0), "channels", &channels) && channels == 8);
         assert(headers && gst_value_array_get_size(headers) == 1);
         GstBuffer *buffer = gst_value_get_buffer(gst_value_array_get_value(headers, 0));
         unsigned char bytes[29];
@@ -120,7 +122,7 @@ int main(int argc, char **argv) {
         native_acmod = session ? 7 : 21;
         assert(SS4S_Opus71Begin(expected_header, 29) == 0);
         assert(SS4S_Opus71Begin(expected_header, 29) == -1);
-        GstCaps *caps = gst_caps_from_string("audio/x-opus,channels=(int)8,rate=(int)48000");
+        GstCaps *caps = gst_caps_from_string("audio/x-opus,channels=(int)6,rate=(int)48000");
         // Change a harmless value to force a fresh CAPS event for session two.
         gst_structure_set(gst_caps_get_structure(caps, 0), "mock-session", G_TYPE_INT, session, NULL);
         assert(gst_pad_push_event(source, gst_event_new_caps(caps)));

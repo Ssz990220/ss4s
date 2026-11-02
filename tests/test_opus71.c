@@ -80,7 +80,17 @@ int main(int argc, char **argv) {
     assert(gst_buffer_extract(buf, 0, copied, sizeof(copied)) == 29 && memcmp(copied, data, 29) == 0);
     assert(!gst_structure_has_field(gst_caps_get_structure(input, 0), "streamheader"));
     gst_caps_unref(next); gst_caps_unref(input);
-    input = gst_caps_from_string("audio/x-opus,channels=(int)6,rate=(int)48000");
+    input = gst_caps_from_string("audio/x-opus,channels=(int)6,rate=(int)48000,channel-mask=(bitmask)0x3f");
+    next = SS4S_Opus71InputCaps(input, data, 29);
+    assert(next);
+    gint restored_channels = 0;
+    assert(gst_structure_get_int(gst_caps_get_structure(next, 0), "channels", &restored_channels));
+    assert(restored_channels == 8);
+    assert(!gst_structure_has_field(gst_caps_get_structure(next, 0), "channel-mask"));
+    assert(gst_structure_get_int(gst_caps_get_structure(input, 0), "channels", &restored_channels));
+    assert(restored_channels == 6); /* Caller CAPS remain untouched. */
+    gst_caps_unref(next); gst_caps_unref(input);
+    input = gst_caps_from_string("audio/x-opus,channels=(int)2,rate=(int)48000");
     assert(!SS4S_Opus71InputCaps(input, data, 29)); gst_caps_unref(input);
 
     GstCaps *native = gst_caps_from_string("audio/x-raw,channels=(int)8,rate=(int)48000,format=S32LE,layout=interleaved,codec=(uint)17,acmod=(uint)21");

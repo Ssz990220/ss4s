@@ -106,7 +106,7 @@ GstCaps *SS4S_Opus71InputCaps(const GstCaps *caps, const unsigned char *data, si
     const GstStructure *s = gst_caps_get_structure(caps, 0);
     gint channels, rate;
     if (!gst_structure_has_name(s, "audio/x-opus") ||
-        !gst_structure_get_int(s, "channels", &channels) || channels != 8 ||
+        !gst_structure_get_int(s, "channels", &channels) || (channels != 6 && channels != 8) ||
         !gst_structure_get_int(s, "rate", &rate) || rate != 48000) return NULL;
     GstCaps *next = gst_caps_copy(caps);
     GstStructure *out = gst_caps_get_structure(next, 0);
@@ -121,7 +121,12 @@ GstCaps *SS4S_Opus71InputCaps(const GstCaps *caps, const unsigned char *data, si
     g_value_unset(&item);
     g_value_unset(&array);
     gst_buffer_unref(buffer);
-    gst_structure_set(out, "channel-mapping-family", G_TYPE_INT, 1,
+    /* The NDL creation descriptor is six-channel because its API rejects 8.
+     * These are compressed-input CAPS, restored to the real negotiated header;
+     * no six-channel decoded samples are relabelled as eight channels. */
+    gst_structure_remove_field(out, "channel-mask");
+    gst_structure_set(out, "channels", G_TYPE_INT, 8,
+                      "channel-mapping-family", G_TYPE_INT, 1,
                       "stream-count", G_TYPE_INT, (gint)config.streamCount,
                       "coupled-count", G_TYPE_INT, (gint)config.coupledCount, NULL);
     g_value_init(&array, GST_TYPE_ARRAY);
@@ -166,6 +171,10 @@ static GstPadProbeReturn caps_probe(GstPad *pad, GstPadProbeInfo *info, gpointer
     g_mutex_lock(&lock);
     if (active && GPOINTER_TO_INT(mode) == 1) {
         next = SS4S_Opus71InputCaps(caps, header, header_size);
+        if (next) {
+            fprintf(stderr, "Opus71 decoder input: full eight-channel OpusHead applied\n");
+            notify('I');
+        }
     } else if (active && SS4S_Opus71NativeCaps(caps)) {
         GstElement *element = gst_pad_get_parent_element(pad);
         if (element) {
