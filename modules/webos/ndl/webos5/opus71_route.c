@@ -26,6 +26,7 @@ static gboolean active;
 static unsigned char header[29];
 static size_t header_size;
 static unsigned generation;
+extern char *SS4S_Opus71LoadConfig(const char *, const unsigned char *, size_t);
 typedef struct {
     GWeakRef element;
     gboolean multich, bypass;
@@ -260,4 +261,35 @@ GstElement *gst_element_factory_create(GstElementFactory *factory, const gchar *
     GstElement *element = real_create ? real_create(factory, name) : NULL;
     attach(element);
     return element;
+}
+
+typedef void (*MediaCallback)(int, long long, const char *);
+static bool (*real_load)(void *, const char *, MediaCallback);
+static pthread_once_t load_once = PTHREAD_ONCE_INIT;
+static void resolve_load(void) {
+    real_load = dlsym(RTLD_NEXT, "_ZN17StarfishMediaAPIs4LoadEPKcPFvixS1_E");
+}
+/* Match the copied C5 library's ARM32 C++ member ABI, including implicit this.
+ * The real Load consumes/copies its JSON during the call, as with NDL's local
+ * string. Keep the replacement alive until that call returns. */
+bool ss4s_starfish_load(void *self, const char *text, MediaCallback callback)
+    __asm__("_ZN17StarfishMediaAPIs4LoadEPKcPFvixS1_E");
+bool ss4s_starfish_load(void *self, const char *text, MediaCallback callback) {
+    pthread_once(&load_once, resolve_load);
+    if (!real_load) return FALSE;
+    unsigned char copied[29]; size_t size = 0; unsigned serial;
+    g_mutex_lock(&lock);
+    serial = generation;
+    if (active) { size = header_size; memcpy(copied, header, size); }
+    g_mutex_unlock(&lock);
+    char *replacement = size ? SS4S_Opus71LoadConfig(text, copied, size) : NULL;
+    if (replacement) {
+        fprintf(stderr, "Opus71 player input: full eight-channel OpusHead applied\n");
+        g_mutex_lock(&lock);
+        if (active && generation == serial) notify('L');
+        g_mutex_unlock(&lock);
+    }
+    gboolean result = real_load(self, replacement ? replacement : text, callback);
+    g_free(replacement);
+    return result;
 }

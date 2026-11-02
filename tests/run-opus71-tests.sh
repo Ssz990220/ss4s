@@ -11,6 +11,7 @@ $CC -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$ROOT/tests/test_opus71.c" \
     "$ROOT/modules/webos/ndl/webos5/opus_config.c" \
     "$ROOT/modules/webos/ndl/webos5/opus71_route.c" \
+    "$ROOT/modules/webos/ndl/webos5/opus71_load.c" \
     -I"$ROOT/modules/webos/ndl/webos5" \
     $(pkg-config --cflags --libs gstreamer-1.0 opus) -lpthread -ldl -lm -o "$DEST"
 GST_REGISTRY_FORK=no "$DEST"
@@ -18,6 +19,19 @@ $CC -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     "$ROOT/tests/test_opus71_hooks.c" \
     "$ROOT/modules/webos/ndl/webos5/opus_config.c" \
     "$ROOT/modules/webos/ndl/webos5/opus71_route.c" \
+    "$ROOT/modules/webos/ndl/webos5/opus71_load.c" \
     -I"$ROOT/modules/webos/ndl/webos5" \
     $(pkg-config --cflags --libs gstreamer-1.0) -lpthread -ldl -o "$DEST-hooks"
 GST_REGISTRY_FORK=no "$DEST-hooks"
+$CC -std=c11 -Wall -Wextra -Werror -shared -fPIC -fsanitize=address,undefined -g \
+    "$ROOT/tests/mock_starfish_load.c" -o "$DEST-mock.so"
+$CC -std=c11 -Wall -Wextra -Werror -shared -fPIC -fsanitize=address,undefined -g \
+    "$ROOT/modules/webos/ndl/webos5/opus71_route.c" \
+    "$ROOT/modules/webos/ndl/webos5/opus71_load.c" \
+    "$ROOT/modules/webos/ndl/webos5/opus_config.c" \
+    -I"$ROOT/modules/webos/ndl/webos5" \
+    $(pkg-config --cflags --libs gstreamer-1.0) -lpthread -ldl -o "$DEST-route.so"
+$CC -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    "$ROOT/tests/test_opus71_load.c" -Wl,--no-as-needed "$DEST-route.so" "$DEST-mock.so" \
+    $(pkg-config --cflags --libs glib-2.0) -o "$DEST-load"
+"$DEST-load"
